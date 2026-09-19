@@ -1,0 +1,17 @@
+name: VanillaBalance
+version: 1.0.0
+main: dev.smpcristalix.vanillabalance.VanillaBalancePlugin
+api-version: '1.21'
+load: STARTUP
+authors: [QuerlyFF]
+description: Модульный баланс ванильных механик сервера.
+
+commands:
+  vanillabalance:
+    aliases: [vbalance, vb]
+    description: Управление VanillaBalance
+    usage: /vanillabalance <status|reload|antixray>
+
+permissions:
+  vanillabalance.admin:
+    default: op

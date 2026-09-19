@@ -1,0 +1,65 @@
+# ============================================================
+# VanillaBalance — Paper 1.21.1 / Java 21
+# ============================================================
+
+modules:
+  ores:
+    enabled: true
+    reduction-percent: 15.0
+    environments:
+      overworld: true
+      nether: true
+      end: false
+    excluded-worlds: []
+    ores:
+      - COAL_ORE
+      - DEEPSLATE_COAL_ORE
+      - COPPER_ORE
+      - DEEPSLATE_COPPER_ORE
+      - IRON_ORE
+      - DEEPSLATE_IRON_ORE
+      - GOLD_ORE
+      - DEEPSLATE_GOLD_ORE
+      - REDSTONE_ORE
+      - DEEPSLATE_REDSTONE_ORE
+      - LAPIS_ORE
+      - DEEPSLATE_LAPIS_ORE
+      - DIAMOND_ORE
+      - DEEPSLATE_DIAMOND_ORE
+      - EMERALD_ORE
+      - DEEPSLATE_EMERALD_ORE
+      - NETHER_GOLD_ORE
+      - NETHER_QUARTZ_ORE
+      - ANCIENT_DEBRIS
+
+  anti-xray:
+    enabled: true
+    expected-engine-mode: 3
+    expected-overworld-max-height: 64
+    expected-nether-max-height: 128
+    expected-update-radius: 2
+    expected-use-permission: false
+
+  heavy-core:
+    enabled: true
+    reduction-percent: 20.0
+    ominous-vault-only: true
+
+  elytra:
+    enabled: true
+    # Во время естественной генерации каждого End City шанс оставить Elytra = 1/N.
+    keep-one-in: 3
+
+  iron-golem:
+    enabled: true
+    iron-drop-reduction-percent: 50.0
+
+  experience:
+    enabled: true
+    # Только ванильный/естественный XP, который проходит через PlayerExpChangeEvent.
+    multiplier: 0.5
+
+  villagers:
+    enabled: true
+    block-when-coin-provider-missing: true
+    emerald-to-coin-rate: 1.0

@@ -1,7 +1,11 @@
 package dev.smpcristalix.vanillabalance;
 
+import dev.smpcristalix.vanillabalance.api.CoinProvider;
+import dev.smpcristalix.vanillabalance.api.StatShardProvider;
 import dev.smpcristalix.vanillabalance.command.VanillaBalanceCommand;
 import dev.smpcristalix.vanillabalance.config.VanillaBalanceSettings;
+import dev.smpcristalix.vanillabalance.item.SmpCoinProvider;
+import dev.smpcristalix.vanillabalance.item.SmpStatShardProvider;
 import dev.smpcristalix.vanillabalance.module.antixray.AntiXrayAdvisor;
 import dev.smpcristalix.vanillabalance.module.elytra.ElytraGenerationListener;
 import dev.smpcristalix.vanillabalance.module.experience.ExperienceNerfListener;
@@ -15,6 +19,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.WorldInitEvent;
 import org.bukkit.event.world.WorldLoadEvent;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashSet;
@@ -47,6 +52,7 @@ public final class VanillaBalancePlugin extends JavaPlugin implements Listener {
             return;
         }
 
+        registerSharedItems();
         Bukkit.getPluginManager().registerEvents(this, this);
         createModules();
         registerCommand();
@@ -55,6 +61,26 @@ public final class VanillaBalancePlugin extends JavaPlugin implements Listener {
         Bukkit.getWorlds().forEach(this::registerOrePopulator);
 
         getLogger().info("VanillaBalance 1.0.0 включён.");
+    }
+
+    /**
+     * Регистрируем физические SMP-предметы через Bukkit ServicesManager.
+     * Торговля использует CoinProvider напрямую; будущий модуль характеристик
+     * сможет так же получить StatShardProvider без копирования item-id/метаданных.
+     */
+    private void registerSharedItems() {
+        Bukkit.getServicesManager().register(
+                CoinProvider.class,
+                new SmpCoinProvider(),
+                this,
+                ServicePriority.Normal
+        );
+        Bukkit.getServicesManager().register(
+                StatShardProvider.class,
+                new SmpStatShardProvider(),
+                this,
+                ServicePriority.Normal
+        );
     }
 
     private void createModules() {
@@ -151,6 +177,7 @@ public final class VanillaBalancePlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         removeOrePopulator();
         if (villagerListener != null) villagerListener.closeAllSessions();
+        Bukkit.getServicesManager().unregisterAll(this);
         oreWorlds.clear();
     }
 }

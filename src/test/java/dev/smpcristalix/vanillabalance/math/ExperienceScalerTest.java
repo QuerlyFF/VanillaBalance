@@ -25,4 +25,11 @@ class ExperienceScalerTest {
         assertEquals(0, result.granted());
         assertEquals(0.25, result.remainder(), 1.0E-12);
     }
+
+    @Test
+    void discardsCorruptPersistedFraction() {
+        var result = ExperienceScaler.scale(3, 0.5, Double.NaN);
+        assertEquals(1, result.granted());
+        assertEquals(0.5, result.remainder(), 1.0E-12);
+    }
 }

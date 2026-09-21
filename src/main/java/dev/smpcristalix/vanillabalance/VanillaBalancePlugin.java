@@ -15,6 +15,7 @@ import dev.smpcristalix.vanillabalance.module.ore.OreNerfPopulator;
 import dev.smpcristalix.vanillabalance.module.villager.VillagerCoinTradeListener;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.WorldInitEvent;
@@ -134,11 +135,13 @@ public final class VanillaBalancePlugin extends JavaPlugin implements Listener {
     }
 
     public String reloadPluginConfiguration() {
+        String previousConfig = getConfig().saveToString();
         reloadConfig();
         VanillaBalanceSettings loaded;
         try {
             loaded = VanillaBalanceSettings.load(getConfig());
         } catch (IllegalArgumentException ex) {
+            restoreConfig(previousConfig);
             return ex.getMessage();
         }
 
@@ -156,6 +159,14 @@ public final class VanillaBalancePlugin extends JavaPlugin implements Listener {
         antiXrayAdvisor = new AntiXrayAdvisor(this, settings);
         if (settings.antiXrayEnabled()) antiXrayAdvisor.logStartupAudit();
         return null;
+    }
+
+    private void restoreConfig(String serialized) {
+        try {
+            getConfig().loadFromString(serialized);
+        } catch (InvalidConfigurationException impossible) {
+            throw new IllegalStateException("Could not restore previously valid config", impossible);
+        }
     }
 
     private void removeOrePopulator() {

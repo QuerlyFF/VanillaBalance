@@ -38,6 +38,7 @@ public final class VillagerCoinTradeListener implements Listener {
 
     private final Plugin plugin;
     private final Map<UUID, TradeSession> sessions = new HashMap<>();
+    private final Map<UUID, UUID> villagerOwners = new HashMap<>();
     private volatile VanillaBalanceSettings settings;
 
     public VillagerCoinTradeListener(Plugin plugin, VanillaBalanceSettings settings) {
@@ -67,31 +68,45 @@ public final class VillagerCoinTradeListener implements Listener {
 
         event.setCancelled(true);
         Player player = event.getPlayer();
-        Bukkit.getScheduler().runTask(plugin, () -> openCoinMerchant(player, villager, provider, snapshot));
+        closeSession(player.getUniqueId());
+
+        UUID villagerId = villager.getUniqueId();
+        UUID previousOwner = villagerOwners.putIfAbsent(villagerId, player.getUniqueId());
+        if (previousOwner != null) {
+            player.sendActionBar(Component.text("С этим жителем уже торгует другой игрок."));
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin,
+                () -> openCoinMerchant(player, villager, villagerId, provider, snapshot));
     }
 
     private void openCoinMerchant(
             Player player,
             AbstractVillager villager,
+            UUID villagerId,
             CoinProvider provider,
             VanillaBalanceSettings snapshot
     ) {
-        if (!player.isOnline() || !villager.isValid()) return;
-
-        closeSession(player.getUniqueId());
+        if (!player.isOnline() || !villager.isValid()) {
+            villagerOwners.remove(villagerId, player.getUniqueId());
+            return;
+        }
 
         List<MerchantRecipe> source = villager.getRecipes();
         List<MerchantRecipe> converted = new ArrayList<>(source.size());
         List<Integer> initialUses = new ArrayList<>(source.size());
+        List<Integer> initialDemand = new ArrayList<>(source.size());
 
         try {
             for (MerchantRecipe recipe : source) {
                 converted.add(convertRecipe(recipe, provider, snapshot.emeraldToCoinRate()));
                 initialUses.add(recipe.getUses());
+                initialDemand.add(recipe.getDemand());
             }
         } catch (RuntimeException ex) {
             plugin.getLogger().severe("Не удалось открыть торговлю за монеты: " + ex.getMessage());
             player.sendActionBar(Component.text("Ошибка монетной системы. Сообщи администрации."));
+            villagerOwners.remove(villagerId, player.getUniqueId());
             return;
         }
 
@@ -102,7 +117,11 @@ public final class VillagerCoinTradeListener implements Listener {
         // окно и синхронно вызвать InventoryCloseEvent.
         InventoryView view = player.openMerchant(merchant, true);
         if (view != null) {
-            sessions.put(player.getUniqueId(), new TradeSession(villager, merchant, List.copyOf(initialUses)));
+            sessions.put(player.getUniqueId(), new TradeSession(
+                    villager, villagerId, merchant,
+                    List.copyOf(initialUses), List.copyOf(initialDemand)));
+        } else {
+            villagerOwners.remove(villagerId, player.getUniqueId());
         }
     }
 
@@ -168,47 +187,52 @@ public final class VillagerCoinTradeListener implements Listener {
             if (player != null && player.isOnline()) player.closeInventory();
             closeSession(id); // fallback, если close event не был вызван
         }
+        villagerOwners.clear();
     }
 
     private void closeSession(UUID playerId) {
         TradeSession session = sessions.remove(playerId);
-        if (session == null || !session.villager().isValid()) return;
+        if (session == null) return;
+        villagerOwners.remove(session.villagerId(), playerId);
+        if (!session.villager().isValid()) return;
 
         // Монетные MerchantRecipe никогда не записываются в жителя.
         List<MerchantRecipe> coinRecipes = session.merchant().getRecipes();
         List<MerchantRecipe> realRecipes = session.villager().getRecipes();
-        int limit = Math.min(Math.min(coinRecipes.size(), realRecipes.size()), session.initialUses().size());
+        int limit = Math.min(
+                Math.min(coinRecipes.size(), realRecipes.size()),
+                Math.min(session.initialUses().size(), session.initialDemand().size())
+        );
         boolean recipeStateChanged = false;
-        int earnedVillagerXp = 0;
+        long earnedVillagerXp = 0L;
 
         for (int i = 0; i < limit; i++) {
             MerchantRecipe coin = coinRecipes.get(i);
             MerchantRecipe real = realRecipes.get(i);
             int previousUses = session.initialUses().get(i);
-            int newUses = Math.max(previousUses, coin.getUses());
-            int completedTrades = Math.max(0, newUses - previousUses);
+            int completedTrades = Math.max(0, coin.getUses() - previousUses);
+            int newUses = (int) Math.min(real.getMaxUses(), (long) real.getUses() + completedTrades);
 
             if (real.getUses() != newUses) {
                 real.setUses(newUses);
                 recipeStateChanged = true;
             }
-            if (real.getDemand() != coin.getDemand()) {
-                real.setDemand(coin.getDemand());
+            long demandDelta = (long) coin.getDemand() - session.initialDemand().get(i);
+            int mergedDemand = (int) Math.max(Integer.MIN_VALUE,
+                    Math.min(Integer.MAX_VALUE, (long) real.getDemand() + demandDelta));
+            if (real.getDemand() != mergedDemand) {
+                real.setDemand(mergedDemand);
                 recipeStateChanged = true;
             }
-            if (real.getMaxUses() != coin.getMaxUses()) {
-                real.setMaxUses(coin.getMaxUses());
-                recipeStateChanged = true;
-            }
-
             if (completedTrades > 0) {
-                earnedVillagerXp += completedTrades * Math.max(0, real.getVillagerExperience());
+                earnedVillagerXp += (long) completedTrades * Math.max(0, real.getVillagerExperience());
             }
         }
 
         if (recipeStateChanged) session.villager().setRecipes(realRecipes);
-        if (earnedVillagerXp > 0 && session.villager() instanceof Villager villager) {
-            int newExperience = Math.max(0, villager.getVillagerExperience() + earnedVillagerXp);
+        if (earnedVillagerXp > 0L && session.villager() instanceof Villager villager) {
+            int newExperience = (int) Math.min(Integer.MAX_VALUE,
+                    (long) Math.max(0, villager.getVillagerExperience()) + earnedVillagerXp);
             villager.setVillagerExperience(newExperience);
 
             // Java Edition повышает максимум один уровень после закрытия одной торговой сессии.
@@ -226,7 +250,9 @@ public final class VillagerCoinTradeListener implements Listener {
 
     private record TradeSession(
             AbstractVillager villager,
+            UUID villagerId,
             Merchant merchant,
-            List<Integer> initialUses
+            List<Integer> initialUses,
+            List<Integer> initialDemand
     ) {}
 }
